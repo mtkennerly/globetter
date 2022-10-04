@@ -25,7 +25,7 @@
 //! To print all jpg files in `/media/` and all of its subdirectories.
 //!
 //! ```rust,no_run
-//! use glob::glob;
+//! use globetter::glob;
 //!
 //! for entry in glob("/media/**/*.jpg").expect("Failed to read glob pattern") {
 //!     match entry {
@@ -40,8 +40,8 @@
 //! instead of printing them.
 //!
 //! ```rust,no_run
-//! use glob::glob_with;
-//! use glob::MatchOptions;
+//! use globetter::glob_with;
+//! use globetter::MatchOptions;
 //!
 //! let options = MatchOptions {
 //!     case_sensitive: false,
@@ -125,7 +125,7 @@ pub struct Paths {
 /// `kittens.jpg`, `puppies.jpg` and `hamsters.gif`:
 ///
 /// ```rust,no_run
-/// use glob::glob;
+/// use globetter::glob;
 ///
 /// for entry in glob("/media/pictures/*.jpg").unwrap() {
 ///     match entry {
@@ -149,7 +149,7 @@ pub struct Paths {
 /// `filter_map`:
 ///
 /// ```rust
-/// use glob::glob;
+/// use globetter::glob;
 /// use std::result::Result;
 ///
 /// for path in glob("/media/pictures/*.jpg").unwrap().filter_map(Result::ok) {
@@ -682,7 +682,7 @@ impl Pattern {
     /// # Examples
     ///
     /// ```rust
-    /// use glob::Pattern;
+    /// use globetter::Pattern;
     ///
     /// assert!(Pattern::new("c?t").unwrap().matches("cat"));
     /// assert!(Pattern::new("k[!e]tteh").unwrap().matches("kitteh"));

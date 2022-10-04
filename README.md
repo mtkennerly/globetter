@@ -1,5 +1,9 @@
-glob
-====
+globetter
+=========
+
+This is a minimal fork of the [glob crate](https://crates.io/crates/glob).
+As of 2022-10-04, its last release was 2019-03-07, and there are some open defects.
+This fork is intended as a drop-in replacement for bug fixes.
 
 Support for matching file paths against Unix shell style patterns.
 
@@ -9,25 +13,14 @@ Support for matching file paths against Unix shell style patterns.
 
 ## Usage
 
-To use `glob`, add this to your `Cargo.toml`:
-
-```toml
-[dependencies]
-glob = "0.3.0"
-```
-
-And add this to your crate root:
-
-```rust
-extern crate glob;
-```
+To use `globetter`, add it to your project by running `cargo add globetter`.
 
 ## Examples
 
 Print all jpg files in /media/ and all of its subdirectories.
 
 ```rust
-use glob::glob;
+use globetter::glob;
 
 for entry in glob("/media/**/*.jpg").expect("Failed to read glob pattern") {
     match entry {

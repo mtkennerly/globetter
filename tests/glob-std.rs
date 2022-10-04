@@ -12,10 +12,10 @@
 
 #![cfg_attr(test, deny(warnings))]
 
-extern crate glob;
+extern crate globetter;
 extern crate tempdir;
 
-use glob::glob;
+use globetter::glob;
 use std::env;
 use std::fs;
 use std::path::PathBuf;
