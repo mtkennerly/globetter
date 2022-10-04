@@ -864,7 +864,7 @@ fn fill_todo(
                         if !options.case_sensitive || last.as_os_str().to_string_lossy() == s {
                             // Return the capitalization matching the file system.
                             next_path.pop();
-                            next_path.push(last);
+                            next_path.push(last.as_os_str());
                             add(todo, next_path);
                         }
                     }
