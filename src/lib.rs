@@ -805,8 +805,7 @@ impl Pattern {
 }
 
 // Fills `todo` with paths under `path` to be matched by `patterns[idx]`,
-// special-casing patterns to match `.` and `..`, and avoiding `readdir()`
-// calls when there are no metacharacters in the pattern.
+// special-casing patterns to match `.` and `..`.
 fn fill_todo(
     todo: &mut Vec<Result<(PathBuf, usize), GlobError>>,
     patterns: &[Pattern],
@@ -849,13 +848,27 @@ fn fill_todo(
             // we can just check for that one entry and potentially recurse
             // right away.
             let special = "." == s || ".." == s;
-            let next_path = if curdir {
-                PathBuf::from(s)
+            let mut next_path = if curdir {
+                PathBuf::from(&s)
             } else {
                 path.join(&s)
             };
-            if (special && is_dir) || (!special && fs::metadata(&next_path).is_ok()) {
+            let next_path_plain = next_path.to_string_lossy();
+            if special && is_dir {
                 add(todo, next_path);
+            } else if next_path == PathBuf::from("/") || (next_path_plain.ends_with(":") && next_path_plain.len() == 2) {
+                add(todo, next_path);
+            } else if !special && fs::metadata(&next_path).is_ok() {
+                if let Ok(canonical) = fs::canonicalize(&next_path) {
+                    if let Some(last) = canonical.components().last() {
+                        if !options.case_sensitive || last.as_os_str().to_string_lossy() == s {
+                            // Return the capitalization matching the file system.
+                            next_path.pop();
+                            next_path.push(last);
+                            add(todo, next_path);
+                        }
+                    }
+                }
             }
         }
         None if is_dir => {
@@ -1015,7 +1028,7 @@ impl MatchOptions {
 
 #[cfg(test)]
 mod test {
-    use super::{glob, MatchOptions, Pattern};
+    use super::{glob, glob_with, MatchOptions, Paths, Pattern};
     use std::path::Path;
 
     #[test]
@@ -1275,6 +1288,21 @@ mod test {
     }
 
     #[test]
+    fn test_pattern_matches_case_sensitive() {
+        let pat = Pattern::new("aBcDeFg").unwrap();
+        let options = MatchOptions {
+            case_sensitive: true,
+            require_literal_separator: false,
+            require_literal_leading_dot: false,
+        };
+
+        assert!(pat.matches_with("aBcDeFg", options));
+        assert!(!pat.matches_with("abcdefg", options));
+        assert!(!pat.matches_with("ABCDEFG", options));
+        assert!(!pat.matches_with("AbCdEfG", options));
+    }
+
+    #[test]
     fn test_pattern_matches_case_insensitive_range() {
         let pat_within = Pattern::new("[a]").unwrap();
         let pat_except = Pattern::new("[!a]").unwrap();
@@ -1424,5 +1452,78 @@ mod test {
     fn test_path_join() {
         let pattern = Path::new("one").join(&Path::new("**/*.rs"));
         assert!(Pattern::new(pattern.to_str().unwrap()).is_ok());
+    }
+
+    /// https://github.com/rust-lang/glob/issues/61
+    #[test]
+    fn test_glob_with_respects_case_sensitivity_option() {
+        fn check(path: &str, options: MatchOptions) -> Vec<String> {
+            let mut results: Vec<_> = glob_with(path, options)
+                .unwrap()
+                .filter_map(Result::ok)
+                .map(|x| x.to_string_lossy().replace('\\', "/"))
+                .collect();
+            results.sort_by_key(|x| x.to_lowercase());
+            results
+        }
+
+        fn file(path: &str) -> String {
+            format!("{}/{}", env!("CARGO_MANIFEST_DIR"), path).replace('\\', "/")
+        }
+
+        let options_case_insensitive = MatchOptions {
+            case_sensitive: false,
+            require_literal_separator: false,
+            require_literal_leading_dot: false,
+        };
+        let options_case_sensitive = MatchOptions {
+            case_sensitive: true,
+            require_literal_separator: false,
+            require_literal_leading_dot: false,
+        };
+
+        let results: Vec<_> = check(&format!("{}/tests/case/*.txt", env!("CARGO_MANIFEST_DIR")), options_case_insensitive);
+        assert_eq!(
+            vec![
+                file("tests/case/lower.txt"),
+                file("tests/case/MiXeD.tXt"),
+                file("tests/case/UPPER.TXT"),
+            ],
+            results,
+        );
+
+        let results: Vec<_> = check(&format!("{}/tests/cASe/*.TxT", env!("CARGO_MANIFEST_DIR")), options_case_insensitive);
+        assert_eq!(
+            vec![
+                file("tests/case/lower.txt"),
+                file("tests/case/MiXeD.tXt"),
+                file("tests/case/UPPER.TXT"),
+            ],
+            results,
+        );
+
+        let results: Vec<_> = check(&file("tests/case/*.txt"), options_case_sensitive);
+        assert_eq!(
+            vec![file("tests/case/lower.txt")],
+            results,
+        );
+
+        let results: Vec<_> = check(&file("tests/case/*.TXt"), options_case_sensitive);
+        assert_eq!(Vec::<String>::new(), results);
+
+        let results: Vec<_> = check(&file("tests/cASe/*.txt"), options_case_sensitive);
+        assert_eq!(Vec::<String>::new(), results);
+
+        let results: Vec<_> = check("TESTS", options_case_insensitive);
+        assert_eq!(vec!["tests"], results);
+
+        let results: Vec<_> = check("TESTS", options_case_sensitive);
+        assert_eq!(Vec::<String>::new(), results);
+
+        let results: Vec<_> = check("TESTS/case/low*.txt", options_case_insensitive);
+        assert_eq!(vec!["tests/case/lower.txt"], results);
+
+        let results: Vec<_> = check("TESTS/case/low*.txt", options_case_sensitive);
+        assert_eq!(Vec::<String>::new(), results);
     }
 }

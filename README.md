@@ -1,9 +1,10 @@
-globetter
+Globetter
 =========
 
-This is a minimal fork of the [glob crate](https://crates.io/crates/glob).
-As of 2022-10-04, its last release was 2019-03-07, and there are some open defects.
-This fork is intended as a drop-in replacement for bug fixes.
+This is a minimal fork of the [Glob crate](https://crates.io/crates/glob).
+As of 2022-10-04, its last release was 2019-03-07, and there are some outstanding defects.
+This fork is intended as a drop-in replacement for bug fixes,
+detailed in the [changelog](CHANGELOG.md) and [releases page](https://github.com/mtkennerly/globetter/releases).
 
 Support for matching file paths against Unix shell style patterns.
 
