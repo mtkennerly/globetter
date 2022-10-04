@@ -28,10 +28,5 @@ jobs:
     - name: Update rust
       run: rustup update ${{ matrix.channel }} --no-self-update
 
-    - name: Debug
-      run: |
-        pwd
-        ls
-
     - name: Tests
       run: cargo +${{ matrix.channel }} test --all
