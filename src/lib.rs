@@ -1028,7 +1028,7 @@ impl MatchOptions {
 
 #[cfg(test)]
 mod test {
-    use super::{glob, glob_with, MatchOptions, Paths, Pattern};
+    use super::{glob, glob_with, MatchOptions, Pattern};
     use std::path::Path;
 
     #[test]
