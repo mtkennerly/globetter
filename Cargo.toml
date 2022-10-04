@@ -7,8 +7,9 @@ license = "MIT OR Apache-2.0"
 homepage = "https://github.com/mtkennerly/globetter"
 repository = "https://github.com/mtkennerly/globetter"
 documentation = "https://docs.rs/globetter"
+readme = "README.md"
 description = """
-Support for matching file paths against Unix shell style patterns.
+Glob fork with bug fixes! Support for matching file paths against Unix shell style patterns.
 """
 categories = ["filesystem"]
 
