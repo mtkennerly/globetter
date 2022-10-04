@@ -853,7 +853,7 @@ fn fill_todo(
             } else {
                 path.join(&s)
             };
-            let next_path_plain = next_path.to_string_lossy();
+            let next_path_plain = next_path.to_string_lossy().to_string();
             if special && is_dir {
                 add(todo, next_path);
             } else if next_path == PathBuf::from("/") || (next_path_plain.ends_with(":") && next_path_plain.len() == 2) {
