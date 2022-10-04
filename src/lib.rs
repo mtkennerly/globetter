@@ -858,14 +858,37 @@ fn fill_todo(
                 add(todo, next_path);
             } else if next_path == PathBuf::from("/") || (next_path_plain.ends_with(":") && next_path_plain.len() == 2) {
                 add(todo, next_path);
-            } else if !special && fs::metadata(&next_path).is_ok() {
-                if let Ok(canonical) = fs::canonicalize(&next_path) {
-                    if let Some(last) = canonical.components().last() {
-                        if !options.case_sensitive || last.as_os_str().to_string_lossy() == s {
-                            // Return the capitalization matching the file system.
-                            next_path.pop();
-                            next_path.push(last.as_os_str());
-                            add(todo, next_path);
+            } else if !special {
+                if fs::metadata(&next_path).is_ok() {
+                    // The name exists, but if we're on a case-insensitive OS,
+                    // we still need to check the real capitalization.
+                    if cfg!(all(unix, not(target_os = "macos"))) {
+                        add(todo, next_path);
+                    } else {
+                        if let Ok(canonical) = fs::canonicalize(&next_path) {
+                            if let Some(last) = canonical.components().last() {
+                                if !options.case_sensitive || last.as_os_str().to_string_lossy() == s {
+                                    // Return the capitalization matching the file system.
+                                    next_path.pop();
+                                    next_path.push(last.as_os_str());
+                                    add(todo, next_path);
+                                }
+                            }
+                        }
+                    }
+                } else if cfg!(all(unix, not(target_os = "macos"))) && !options.case_sensitive {
+                    // If we're on a case-sensitive OS, it might still exist with different case.
+                    if let Ok(entries) = path.read_dir() {
+                        let s_lower = s.to_lowercase();
+                        for entry in entries.filter_map(|x| x.ok()) {
+                            let name = entry.file_name().to_string_lossy().to_string();
+                            if name.to_lowercase() == s_lower {
+                                // Return the capitalization matching the file system.
+                                let mut next_path = next_path.clone();
+                                next_path.pop();
+                                next_path.push(name);
+                                add(todo, next_path);
+                            }
                         }
                     }
                 }
