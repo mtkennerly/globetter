@@ -1,3 +1,9 @@
+## Unreleased
+
+* Avoided `canonicalize` call during case-insensitive matching on Windows/Mac.
+  If you want the returned path to match the real capitalization on theses OSes,
+  turn on case-sensitive matching or canonicalize it separately.
+
 ## v0.1.0 (2022-10-04)
 
 * Initial release, forked from Glob v0.3.0 plus the latest additions on GitHub

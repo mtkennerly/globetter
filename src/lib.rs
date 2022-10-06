@@ -862,9 +862,9 @@ fn fill_todo(
                 if fs::metadata(&next_path).is_ok() {
                     // The name exists, but if we're on a case-insensitive OS,
                     // we still need to check the real capitalization.
-                    if cfg!(all(unix, not(target_os = "macos"))) {
+                    if cfg!(all(unix, not(target_os = "macos"))) || !options.case_sensitive {
                         add(todo, next_path);
-                    } else {
+                    } else if options.case_sensitive {
                         if let Ok(canonical) = fs::canonicalize(&next_path) {
                             if let Some(last) = canonical.components().last() {
                                 if !options.case_sensitive || last.as_os_str().to_string_lossy() == s {
@@ -1494,6 +1494,8 @@ mod test {
             format!("{}/{}", env!("CARGO_MANIFEST_DIR"), path).replace('\\', "/")
         }
 
+        let os_is_case_sensitive = cfg!(all(unix, not(target_os = "macos")));
+
         let options_case_insensitive = MatchOptions {
             case_sensitive: false,
             require_literal_separator: false,
@@ -1517,11 +1519,19 @@ mod test {
 
         let results: Vec<_> = check(&format!("{}/tests/cASe/*.TxT", env!("CARGO_MANIFEST_DIR")), options_case_insensitive);
         assert_eq!(
-            vec![
-                file("tests/case/lower.txt"),
-                file("tests/case/MiXeD.tXt"),
-                file("tests/case/UPPER.TXT"),
-            ],
+            if os_is_case_sensitive {
+                vec![
+                    file("tests/case/lower.txt"),
+                    file("tests/case/MiXeD.tXt"),
+                    file("tests/case/UPPER.TXT"),
+                ]
+            } else {
+                vec![
+                    file("tests/cASe/lower.txt"),
+                    file("tests/cASe/MiXeD.tXt"),
+                    file("tests/cASe/UPPER.TXT"),
+                ]
+            },
             results,
         );
 
@@ -1538,13 +1548,27 @@ mod test {
         assert_eq!(Vec::<String>::new(), results);
 
         let results: Vec<_> = check("TESTS", options_case_insensitive);
-        assert_eq!(vec!["tests"], results);
+        assert_eq!(
+            if os_is_case_sensitive {
+                vec!["tests"]
+            } else {
+                vec!["TESTS"]
+            },
+            results,
+        );
 
         let results: Vec<_> = check("TESTS", options_case_sensitive);
         assert_eq!(Vec::<String>::new(), results);
 
         let results: Vec<_> = check("TESTS/case/low*.txt", options_case_insensitive);
-        assert_eq!(vec!["tests/case/lower.txt"], results);
+        assert_eq!(
+            if os_is_case_sensitive {
+                vec!["tests/case/lower.txt"]
+            } else {
+                vec!["TESTS/case/lower.txt"]
+            },
+            results,
+        );
 
         let results: Vec<_> = check("TESTS/case/low*.txt", options_case_sensitive);
         assert_eq!(Vec::<String>::new(), results);
