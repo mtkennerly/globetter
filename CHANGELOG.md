@@ -1,10 +1,12 @@
 ## v0.1.1 (2022-10-07)
 
-* Avoided `canonicalize` call during case-insensitive matching on Windows/Mac.
-  If you want the returned path to match the real capitalization on theses OSes,
+* To improve performance,
+  avoided `canonicalize` call during case-insensitive matching on Windows/Mac.
+  If you want the returned path to match the real capitalization on these OSes,
   turn on case-sensitive matching or canonicalize it separately.
   ([ticket](https://github.com/rust-lang/glob/issues/61))
-* Avoided unnecessary system calls to determine whether a path is a directory.
+* To improve performance,
+  avoided unnecessary system calls to determine whether a path is a directory.
   ([ticket](https://github.com/rust-lang/glob/issues/79))
 
 ## v0.1.0 (2022-10-04)
