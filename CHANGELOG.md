@@ -1,4 +1,4 @@
-## Unreleased
+## v0.1.1 (2022-10-07)
 
 * Avoided `canonicalize` call during case-insensitive matching on Windows/Mac.
   If you want the returned path to match the real capitalization on theses OSes,
