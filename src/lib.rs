@@ -96,7 +96,7 @@ pub struct Paths {
     dir_patterns: Vec<Pattern>,
     require_dir: bool,
     options: MatchOptions,
-    todo: Vec<Result<(PathBuf, usize), GlobError>>,
+    todo: Vec<Result<(PathBuf, usize, bool), GlobError>>,
     scope: Option<PathBuf>,
 }
 
@@ -337,7 +337,7 @@ impl Iterator for Paths {
                 // Shouldn't happen, but we're using -1 as a special index.
                 assert!(self.dir_patterns.len() < !0 as usize);
 
-                fill_todo(&mut self.todo, &self.dir_patterns, 0, &scope, self.options);
+                fill_todo(&mut self.todo, &self.dir_patterns, 0, &scope, is_dir(&scope), self.options);
             }
         }
 
@@ -346,7 +346,7 @@ impl Iterator for Paths {
                 return None;
             }
 
-            let (path, mut idx) = match self.todo.pop().unwrap() {
+            let (path, mut idx, is_dir) = match self.todo.pop().unwrap() {
                 Ok(pair) => pair,
                 Err(e) => return Some(Err(e)),
             };
@@ -354,7 +354,7 @@ impl Iterator for Paths {
             // idx -1: was already checked by fill_todo, maybe path was '.' or
             // '..' that we can't match here because of normalization.
             if idx == !0 as usize {
-                if self.require_dir && !is_dir(&path) {
+                if self.require_dir && !is_dir {
                     continue;
                 }
                 return Some(Ok(path));
@@ -370,7 +370,7 @@ impl Iterator for Paths {
                     next += 1;
                 }
 
-                if is_dir(&path) {
+                if is_dir {
                     // the path is a directory, so it's a match
 
                     // push this directory's contents
@@ -379,6 +379,7 @@ impl Iterator for Paths {
                         &self.dir_patterns,
                         next,
                         &path,
+                        is_dir,
                         self.options,
                     );
 
@@ -418,7 +419,7 @@ impl Iterator for Paths {
                     // *AND* its children so we don't need to check the
                     // children
 
-                    if !self.require_dir || is_dir(&path) {
+                    if !self.require_dir || is_dir {
                         return Some(Ok(path));
                     }
                 } else {
@@ -427,6 +428,7 @@ impl Iterator for Paths {
                         &self.dir_patterns,
                         idx + 1,
                         &path,
+                        is_dir,
                         self.options,
                     );
                 }
@@ -807,10 +809,11 @@ impl Pattern {
 // Fills `todo` with paths under `path` to be matched by `patterns[idx]`,
 // special-casing patterns to match `.` and `..`.
 fn fill_todo(
-    todo: &mut Vec<Result<(PathBuf, usize), GlobError>>,
+    todo: &mut Vec<Result<(PathBuf, usize, bool), GlobError>>,
     patterns: &[Pattern],
     idx: usize,
     path: &Path,
+    path_is_dir: bool,
     options: MatchOptions,
 ) {
     // convert a pattern that's just many Char(_) to a string
@@ -826,19 +829,18 @@ fn fill_todo(
         Some(s)
     }
 
-    let add = |todo: &mut Vec<_>, next_path: PathBuf| {
+    let add = |todo: &mut Vec<_>, is_dir: bool, next_path: PathBuf| {
         if idx + 1 == patterns.len() {
             // We know it's good, so don't make the iterator match this path
             // against the pattern again. In particular, it can't match
             // . or .. globs since these never show up as path components.
-            todo.push(Ok((next_path, !0 as usize)));
+            todo.push(Ok((next_path, !0 as usize, is_dir)));
         } else {
-            fill_todo(todo, patterns, idx + 1, &next_path, options);
+            fill_todo(todo, patterns, idx + 1, &next_path, is_dir, options);
         }
     };
 
     let pattern = &patterns[idx];
-    let is_dir = is_dir(path);
     let curdir = path == Path::new(".");
     match pattern_as_str(pattern) {
         Some(s) => {
@@ -854,16 +856,16 @@ fn fill_todo(
                 path.join(&s)
             };
             let next_path_plain = next_path.to_string_lossy().to_string();
-            if special && is_dir {
-                add(todo, next_path);
+            if special && path_is_dir {
+                add(todo, is_dir(&next_path), next_path);
             } else if next_path == PathBuf::from("/") || (next_path_plain.ends_with(":") && next_path_plain.len() == 2) {
-                add(todo, next_path);
+                add(todo, is_dir(&next_path), next_path);
             } else if !special {
                 if fs::metadata(&next_path).is_ok() {
                     // The name exists, but if we're on a case-insensitive OS,
                     // we still need to check the real capitalization.
                     if cfg!(all(unix, not(target_os = "macos"))) || !options.case_sensitive {
-                        add(todo, next_path);
+                        add(todo, is_dir(&next_path), next_path);
                     } else if options.case_sensitive {
                         if let Ok(canonical) = fs::canonicalize(&next_path) {
                             if let Some(last) = canonical.components().last() {
@@ -871,7 +873,7 @@ fn fill_todo(
                                     // Return the capitalization matching the file system.
                                     next_path.pop();
                                     next_path.push(last.as_os_str());
-                                    add(todo, next_path);
+                                    add(todo, is_dir(&next_path), next_path);
                                 }
                             }
                         }
@@ -887,21 +889,22 @@ fn fill_todo(
                                 let mut next_path = next_path.clone();
                                 next_path.pop();
                                 next_path.push(name);
-                                add(todo, next_path);
+                                add(todo, is_dir(&next_path), next_path);
                             }
                         }
                     }
                 }
             }
         }
-        None if is_dir => {
+        None if path_is_dir => {
             let dirs = fs::read_dir(path).and_then(|d| {
                 d.map(|e| {
                     e.map(|e| {
+                        let e_is_dir = e.file_type().unwrap().is_dir();
                         if curdir {
-                            PathBuf::from(e.path().file_name().unwrap())
+                            (PathBuf::from(e.path().file_name().unwrap()), e_is_dir)
                         } else {
-                            e.path()
+                            (e.path(), e_is_dir)
                         }
                     })
                 })
@@ -909,8 +912,8 @@ fn fill_todo(
             });
             match dirs {
                 Ok(mut children) => {
-                    children.sort_by(|p1, p2| p2.file_name().cmp(&p1.file_name()));
-                    todo.extend(children.into_iter().map(|x| Ok((x, idx))));
+                    children.sort_by(|p1, p2| p2.0.file_name().cmp(&p1.0.file_name()));
+                    todo.extend(children.into_iter().map(|x| Ok((x.0, idx, x.1))));
 
                     // Matching the special directory entries . and .. that
                     // refer to the current and parent directory respectively
@@ -920,7 +923,7 @@ fn fill_todo(
                     if !pattern.tokens.is_empty() && pattern.tokens[0] == Char('.') {
                         for &special in &[".", ".."] {
                             if pattern.matches_with(special, options) {
-                                add(todo, path.join(special));
+                                add(todo, true, path.join(special));
                             }
                         }
                     }
