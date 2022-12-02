@@ -1,4 +1,4 @@
-## Unreleased
+## v0.2.0 (2022-12-02)
 
 * Added `MatchOptions::follow_links` to control symlink behavior during directory traversal.
   The default is `true`, in line with the existing behavior.
