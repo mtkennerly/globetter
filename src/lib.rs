@@ -315,12 +315,16 @@ impl fmt::Display for GlobError {
     }
 }
 
-fn is_dir(p: &Path, follow_links: bool) -> bool {
-    let metadata = if follow_links {
+fn metadata(p: &Path, follow_links: bool) -> io::Result<fs::Metadata> {
+    if follow_links {
         fs::metadata(p)
     } else {
         fs::symlink_metadata(p)
-    };
+    }
+}
+
+fn is_dir(p: &Path, follow_links: bool) -> bool {
+    let metadata = metadata(p, follow_links);
     metadata.map(|m| m.is_dir()).unwrap_or(false)
 }
 
@@ -876,11 +880,11 @@ fn fill_todo(
             {
                 add(todo, is_dir(&next_path, options.follow_links), next_path);
             } else if !special {
-                if fs::metadata(&next_path).is_ok() {
+                if let Ok(next_path_metadata) = metadata(&next_path, options.follow_links) {
                     // The name exists, but if we're on a case-insensitive OS,
                     // we still need to check the real capitalization.
                     if cfg!(all(unix, not(target_os = "macos"))) || !options.case_sensitive {
-                        add(todo, is_dir(&next_path, options.follow_links), next_path);
+                        add(todo, next_path_metadata.is_dir(), next_path);
                     } else if options.case_sensitive {
                         if let Ok(canonical) = fs::canonicalize(&next_path) {
                             if let Some(last) = canonical.components().last() {
@@ -890,7 +894,7 @@ fn fill_todo(
                                     // Return the capitalization matching the file system.
                                     next_path.pop();
                                     next_path.push(last.as_os_str());
-                                    add(todo, is_dir(&next_path, options.follow_links), next_path);
+                                    add(todo, next_path_metadata.is_dir(), next_path);
                                 }
                             }
                         }
@@ -1078,6 +1082,7 @@ impl MatchOptions {
 #[cfg(test)]
 mod test {
     use super::{glob, glob_with, MatchOptions, Pattern};
+    use std;
     use std::path::Path;
 
     #[test]
@@ -1609,5 +1614,66 @@ mod test {
 
         let results: Vec<_> = check("TESTS/case/low*.txt", options_case_sensitive);
         assert_eq!(Vec::<String>::new(), results);
+    }
+
+    /// https://github.com/rust-lang/glob/issues/62
+    #[test]
+    fn test_glob_with_respects_follow_links_option() {
+        fn check(path: &str, options: MatchOptions) -> Vec<String> {
+            let mut results: Vec<_> = glob_with(path, options)
+                .unwrap()
+                .filter_map(Result::ok)
+                .map(|x| x.to_string_lossy().replace('\\', "/"))
+                .collect();
+            results.sort_by_key(|x| x.to_lowercase());
+            results
+        }
+
+        fn file(path: &str) -> String {
+            format!("{}/{}", env!("CARGO_MANIFEST_DIR"), path).replace('\\', "/")
+        }
+
+        let os_is_case_sensitive = cfg!(all(unix, not(target_os = "macos")));
+
+        let options_follow = MatchOptions {
+            case_sensitive: os_is_case_sensitive,
+            require_literal_separator: false,
+            require_literal_leading_dot: false,
+            follow_links: true,
+        };
+        let options_no_follow = MatchOptions {
+            case_sensitive: os_is_case_sensitive,
+            require_literal_separator: false,
+            require_literal_leading_dot: false,
+            follow_links: false,
+        };
+
+        if std::fs::metadata(file("tests/symlink")).is_err() {
+            #[cfg(windows)]
+            {
+                std::process::Command::new("cmd.exe")
+                    .arg("/c")
+                    .arg("mklink /J tests\\symlink-src src")
+                    .current_dir(env!("CARGO_MANIFEST_DIR"))
+                    .output()
+                    .unwrap();
+            }
+            #[cfg(not(windows))]
+            {
+                std::os::unix::fs::symlink(file("src"), file("tests/symlink-src")).unwrap();
+            }
+        }
+
+        let results: Vec<_> = check(
+            &format!("{}/tests/symlink-src/*.rs", env!("CARGO_MANIFEST_DIR")),
+            options_follow,
+        );
+        assert_eq!(vec![file("tests/symlink-src/lib.rs")], results,);
+
+        let results: Vec<_> = check(
+            &format!("{}/tests/symlink-src/*.rs", env!("CARGO_MANIFEST_DIR")),
+            options_no_follow,
+        );
+        assert!(results.is_empty());
     }
 }

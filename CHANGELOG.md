@@ -4,6 +4,9 @@
   The default is `true`, in line with the existing behavior.
   ([ticket](https://github.com/rust-lang/glob/issues/62))
   ([contributed by arilou](https://github.com/mtkennerly/globetter/pull/1))
+* Avoided an extra `metadata` lookup when:
+  * a match is found on Linux and `case_sensitive` is true
+  * a match is found on Windows/Mac and `case_sensitive` is false
 
 ## v0.1.1 (2022-10-07)
 
